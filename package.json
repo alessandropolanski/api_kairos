@@ -29,7 +29,6 @@
     "express": "^4.19.2",
     "mongodb": "^6.16.0",
     "mongoose": "^8.15.1",
-    "sequelize": "^6.37.7",
-    "zod": "^3.25.49"
+    "sequelize": "^6.37.7"
   }
 }
