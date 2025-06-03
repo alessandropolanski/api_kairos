@@ -7,7 +7,7 @@ const registerUser = async (req: Request, res: Response) => {
   const { pki, name, email, password, role } = req.body;
 
   try {
-    let user = await db.collection("users").findOne({ pki: pki });
+    let user = await db.collection("user").findOne({ pki: pki });
 
     if (user) {
       return res.status(403).json({ message: "User already exists" });
@@ -29,7 +29,7 @@ const registerUser = async (req: Request, res: Response) => {
 
 
       let response = await db
-        .collection("users")
+        .collection("user")
         .insertOne(newUser);
 
       if (response.acknowledged) {
@@ -47,7 +47,7 @@ const loginUser = async (req: Request, res: Response) => {
     const { pki, password } = req.body;
 
     try {
-        let user = await db.collection("users").findOne({ pki: pki });
+        let user = await db.collection("user").findOne({ pki: pki });
 
         if (!user) {
           return res.status(401).json({ message: "User not found" });
@@ -66,6 +66,10 @@ const loginUser = async (req: Request, res: Response) => {
     } catch (error) {
         return res.status(500).json({ message: error });
     }
+}
+
+const logoutUser = async (req: Request, res: Response) => {
+
 }
 
 export default {
