@@ -1,23 +1,20 @@
-import { Schema, model, Document, Types } from "mongoose";
+import { Schema, model, InferSchemaType, HydratedDocument } from 'mongoose';
+import uuid4 from 'uuid4';
 
-export interface ISession extends Document {
-    userId: Types.ObjectId;
-    sessionId: string;
-    ip: string;
-    userAgent: string;
-    createdAt: Date;
-    expiresAt: Date;
-    valid: boolean;
-}
-
-const sessionSchema = new Schema<ISession>({
-    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
-    sessionId: { type: String, required: true, unique: true },
-    ip: { type: String, required: true },
-    userAgent: { type: String, required: true },
-    createdAt: { type: Date, default: Date.now },
-    expiresAt: { type: Date, required: true },
-    valid: { type: Boolean, default: true }
+// 1) Schema
+export const sessionSchema = new Schema({
+  userPki: { type: String, required: true },
+  sessionId: { type: String, required: true, unique: true, default: () => uuid4() },
+  ip: { type: String, required: true },
+  userAgent: { type: String, required: true },
+  createdAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, required: true },
+  valid: { type: Boolean, default: true }
 });
 
-export const Session = model<ISession>('Session', sessionSchema);
+// 2) Tipos inferidos
+export type Session = InferSchemaType<typeof sessionSchema>;
+export type SessionDoc = HydratedDocument<Session>;
+
+// 3) Model
+export const SessionModel = model<Session>('Session', sessionSchema);
