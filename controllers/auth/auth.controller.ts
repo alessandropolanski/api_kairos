@@ -4,6 +4,7 @@ import { hashPassword, comparePassword } from "./auxFunctions";
 import { SessionModel } from "../../models/Session";
 import jwt from "jsonwebtoken";
 
+
 const registerUser = async (req: Request, res: Response) => {
   const { pki, name, email, password, role } = req.body;
 
