@@ -3,13 +3,18 @@ import { db } from "../../database/database";
 import { hashPassword, comparePassword } from "./auxFunctions";
 import { SessionModel } from "../../models/Session";
 import jwt from "jsonwebtoken";
+import { InferSchemaType } from "mongoose";
+import { HydratedDocument } from "mongoose";
+import { UserModel, userSchema } from "../../models/User";
 
+type User = InferSchemaType<typeof userSchema>;
+type UserDoc = HydratedDocument <User>;
 
 const registerUser = async (req: Request, res: Response) => {
   const { pki, name, email, password, role } = req.body;
 
   try {
-    let user = await db.collection("user").findOne({ pki: pki });
+    let user: UserDoc | null = await UserModel.findOne({ pki: pki})
 
     if (user) {
       return res.status(403).json({ message: "User already exists" });
@@ -29,16 +34,12 @@ const registerUser = async (req: Request, res: Response) => {
         lastModifiedBy: 'system'
       };
 
+      const newUserSaved = await UserModel.create(newUser);
+      return res.status(200).json({
+        message: "User created",
+        user: newUserSaved
+      });
 
-      let response = await db
-        .collection("user")
-        .insertOne(newUser);
-
-      if (response.acknowledged) {
-        return res.status(201).json({ message: "Created" });
-      } else {
-        return res.status(500).json({ message: "Failed to create user" });
-      }
     }
   } catch (error) {
     return res.status(500).json({ message: error });
@@ -49,7 +50,7 @@ const loginUser = async (req: Request, res: Response) => {
     const { pki, password } = req.body;
 
     try {
-        let user = await db.collection("user").findOne({ pki: pki });
+        let user: UserDoc | null = await UserModel.findOne({ pki: pki})
 
         if (!user) {
           return res.status(401).json({ message: "User not found" });

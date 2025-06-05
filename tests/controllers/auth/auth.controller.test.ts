@@ -1,12 +1,12 @@
 import { Request, Response } from 'express';
 import authController from '../../../controllers/auth/auth.controller';
-import { db } from '../../../database/database';
 import { hashPassword, comparePassword } from '../../../controllers/auth/auxFunctions';
 import { SessionModel } from '../../../models/Session';
 import jwt from 'jsonwebtoken';
+import { UserModel } from '../../../models/User';
 
 // Mock das dependências
-jest.mock('../../../database/database');
+jest.mock('../../../models/User');
 jest.mock('../../../controllers/auth/auxFunctions');
 jest.mock('../../../models/Session');
 jest.mock('jsonwebtoken', () => ({
@@ -49,9 +49,7 @@ describe('Auth Controller', () => {
 
   describe('registerUser', () => {
     it('deve retornar 403 quando o usuário já existe', async () => {
-      (db.collection as jest.Mock).mockReturnValue({
-        findOne: jest.fn().mockResolvedValue({ pki: 'testpki' })
-      });
+      (UserModel.findOne as jest.Mock).mockResolvedValue({ pki: 'testpki' });
 
       await authController.registerUser(
         mockRequest as Request,
@@ -63,10 +61,9 @@ describe('Auth Controller', () => {
     });
 
     it('deve criar um novo usuário com sucesso', async () => {
-      (db.collection as jest.Mock).mockReturnValue({
-        findOne: jest.fn().mockResolvedValue(null),
-        insertOne: jest.fn().mockResolvedValue({ acknowledged: true })
-      });
+      (UserModel.findOne as jest.Mock).mockResolvedValue(null);
+      const mockNewUser = { pki: 'testpki', name: 'Test User' };
+      (UserModel.create as jest.Mock).mockResolvedValue(mockNewUser);
 
       (hashPassword as jest.Mock).mockResolvedValue('hashedPassword');
 
@@ -75,16 +72,17 @@ describe('Auth Controller', () => {
         mockResponse as Response
       );
 
-      expect(mockResponse.status).toHaveBeenCalledWith(201);
-      expect(responseObject).toEqual({ message: 'Created' });
+      expect(mockResponse.status).toHaveBeenCalledWith(200);
+      expect(responseObject).toEqual({
+        message: 'User created',
+        user: mockNewUser
+      });
     });
 
     it('deve retornar 500 quando falha ao criar usuário', async () => {
-      (db.collection as jest.Mock).mockReturnValue({
-        findOne: jest.fn().mockResolvedValue(null),
-        insertOne: jest.fn().mockResolvedValue({ acknowledged: false })
-      });
-
+      const dbError = new Error('Database error');
+      (UserModel.findOne as jest.Mock).mockResolvedValue(null);
+      (UserModel.create as jest.Mock).mockRejectedValue(dbError);
       (hashPassword as jest.Mock).mockResolvedValue('hashedPassword');
 
       await authController.registerUser(
@@ -93,15 +91,13 @@ describe('Auth Controller', () => {
       );
 
       expect(mockResponse.status).toHaveBeenCalledWith(500);
-      expect(responseObject).toEqual({ message: 'Failed to create user' });
+      expect(responseObject).toEqual({ message: dbError });
     });
   });
 
   describe('loginUser', () => {
     it('deve retornar 401 quando o usuário não é encontrado', async () => {
-      (db.collection as jest.Mock).mockReturnValue({
-        findOne: jest.fn().mockResolvedValue(null)
-      });
+      (UserModel.findOne as jest.Mock).mockResolvedValue(null);
 
       await authController.loginUser(
         mockRequest as Request,
@@ -113,11 +109,9 @@ describe('Auth Controller', () => {
     });
 
     it('deve retornar 401 quando a senha está incorreta', async () => {
-      (db.collection as jest.Mock).mockReturnValue({
-        findOne: jest.fn().mockResolvedValue({ 
-          pki: 'testpki',
-          password: 'hashedPassword'
-        })
+      (UserModel.findOne as jest.Mock).mockResolvedValue({ 
+        pki: 'testpki',
+        password: 'hashedPassword'
       });
 
       (comparePassword as jest.Mock).mockResolvedValue(false);
@@ -149,9 +143,7 @@ describe('Auth Controller', () => {
         })
       };
 
-      (db.collection as jest.Mock).mockReturnValue({
-        findOne: jest.fn().mockResolvedValue(mockUser)
-      });
+      (UserModel.findOne as jest.Mock).mockResolvedValue(mockUser);
 
       (comparePassword as jest.Mock).mockResolvedValue(true);
       (SessionModel.updateMany as jest.Mock).mockResolvedValue({ acknowledged: true });
@@ -181,9 +173,7 @@ describe('Auth Controller', () => {
     });
 
     it('deve retornar 500 quando ocorre um erro no login', async () => {
-      (db.collection as jest.Mock).mockReturnValue({
-        findOne: jest.fn().mockRejectedValue(new Error('Database error'))
-      });
+      (UserModel.findOne as jest.Mock).mockRejectedValue(new Error('Database error'));
 
       await authController.loginUser(
         mockRequest as Request,
