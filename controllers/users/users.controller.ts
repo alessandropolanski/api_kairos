@@ -22,7 +22,7 @@ const updateUser = async (req: Request, res: Response) => {
       name: name || user.name,
       email: email || user.email,
       role: role || user.role,  
-      password: password.length > 0 ? await hashPassword(password) : user.password,
+      password: password && password.length > 0 ? await hashPassword(password) : user.password,
       active: active || user.active 
     }
 
