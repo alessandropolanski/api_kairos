@@ -1,9 +1,11 @@
-import { InferSchemaType, HydratedDocument } from "mongoose";
-import { Request, Response } from "express";
+import { Request, response, Response } from "express";
 import { db } from "../../database/database";
 import { hashPassword } from "../auth/auxFunctions";
-import { z } from "zod";
-import { UserModel, User, UserDoc } from "../../models/User";
+import { UserModel, userSchema } from "../../models/User";
+import { HydratedDocument, InferSchemaType } from "mongoose";
+
+type User = InferSchemaType<typeof userSchema>;
+type UserDoc = HydratedDocument<User>;
 
 const updateUser = async (req: Request, res: Response) => {
   const { pki } = req.params;
@@ -11,31 +13,36 @@ const updateUser = async (req: Request, res: Response) => {
 
   try {
 
-    let user: UserDoc | null = await UserModel.findOne({ pki: pki });
-
+    let user: UserDoc | null = await UserModel.findOne({pki: pki});
     if (!user) {
-      return res.status(404).json({ message: "User not found" });
+        return res.status(404).json({ message: "User not found" });
     }
 
     let newUser: Partial<User> = {
       name: name || user.name,
       email: email || user.email,
-      role: role || user.role,
-      password: password || user.password,
-      active: active || user.active
+      role: role || user.role,  
+      password: password.length > 0 ? await hashPassword(password) : user.password,
+      active: active || user.active 
     }
 
-    let response = await db
-      .collection("users")
-      .updateOne(
-        { pki: pki },
-        { $set: newUser }
-      );
+  //  let response = await UserModel.updateOne({pki: pki}, {$set: newUser});
+    const savedUser = await UserModel.findOneAndUpdate(
+      {pki: pki}, 
+      {$set: newUser}, 
+      {new: true}
+    );
 
-    if (response.acknowledged) {
-      console.log(`User saved: ${user}`);
-      return res.status(200).json({ message: "User updated" });
-    }
+
+    return res.status(200).json({
+      message: "User updated",
+      user: {
+        name: savedUser?.name,
+        email: savedUser?.email,
+        active: savedUser?.active
+      }
+    });
+
   } catch (error) {
     console.log(error);
     return res.status(500).json({ message: "Error updating user" });
@@ -44,8 +51,4 @@ const updateUser = async (req: Request, res: Response) => {
 
 export default {
   updateUser,
-  //   deleteUser,
-  //   getUsers,
-  //   getUser,
 };
-
