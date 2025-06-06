@@ -23,10 +23,11 @@ const updateUser = async (req: Request, res: Response) => {
       email: email || user.email,
       role: role || user.role,  
       password: password && password.length > 0 ? await hashPassword(password) : user.password,
-      active: active || user.active 
+      active: active || user.active,
+      updatedAt: new Date(),
+      lastModifiedBy: user.lastModifiedBy
     }
 
-  //  let response = await UserModel.updateOne({pki: pki}, {$set: newUser});
     const savedUser = await UserModel.findOneAndUpdate(
       {pki: pki}, 
       {$set: newUser}, 
