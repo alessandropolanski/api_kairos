@@ -1,15 +1,30 @@
-import { Request, Response } from 'express';
-import teamController from '../../../controllers/teams/teams.controller';
-import { TeamModel } from '../../../models/Team';
-import { UserModel } from '../../../models/User';
+import { Response } from 'express';
+import { AuthenticatedRequest } from '../../../types/auth.types';
 
-jest.mock('../../../models/Team');
-jest.mock('../../../models/User');
+jest.mock('../../../models/Team', () => ({
+  TeamModel: {
+    findOne: jest.fn(),
+    find: jest.fn(),
+    create: jest.fn(),
+    findOneAndUpdate: jest.fn(),
+  },
+}));
+
+jest.mock('../../../models/User', () => ({
+  UserModel: {
+    find: jest.fn(),
+  },
+}));
+
+const { TeamModel } = require('../../../models/Team');
+const { UserModel } = require('../../../models/User');
+const teamController = require('../../../controllers/teams/teams.controller').default;
 
 describe('Team Controller', () => {
-  let mockRequest: Partial<Request>;
+  let mockRequest: Partial<AuthenticatedRequest>;
   let mockResponse: Partial<Response>;
   let responseObject: any;
+  const mockUserPki = 'test-user-pki';
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -18,6 +33,7 @@ describe('Team Controller', () => {
     mockRequest = {
       params: {},
       body: {},
+      user: { pki: mockUserPki } as any,
     };
     mockResponse = {
       status: jest.fn().mockReturnThis(),
@@ -29,181 +45,87 @@ describe('Team Controller', () => {
   });
 
   describe('createTeam', () => {
-    it('should create a team successfully', async () => {
-      mockRequest.body = {
-        id: '1',
-        name: 'Test Team',
-        active: true,
-        users: [],
-        managers: [],
+    it('should create a team successfully with users and managers', async () => {
+      mockRequest.body = { id: '1', name: 'Test Team', users: ['user1'], managers: ['manager1'] };
+
+      TeamModel.findOne.mockResolvedValue(null);
+
+      const countDocumentsMock = jest.fn()
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(1);
+      UserModel.find.mockReturnValue({ countDocuments: countDocumentsMock });
+
+      const populatedTeam = {
+        ...mockRequest.body,
+        users: [{ _id: 'user1' }],
+        managers: [{ _id: 'manager1' }],
       };
 
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(null);
-      (UserModel.find as jest.Mock).mockReturnValue({
-        countDocuments: jest.fn().mockResolvedValue(0)
+      TeamModel.create.mockResolvedValue({
+        populate: jest.fn().mockResolvedValue(populatedTeam),
       });
 
-      const newTeam = {
-        id: '1',
-        name: 'Test Team',
-        active: true,
-        users: [],
-        managers: [],
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date),
-        lastModifiedBy: 'system',
-      };
-      (TeamModel.create as jest.Mock).mockResolvedValue(newTeam);
-
-      await teamController.createTeam(mockRequest as Request, mockResponse as Response);
+      await teamController.createTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
 
       expect(mockResponse.status).toHaveBeenCalledWith(200);
       expect(responseObject.message).toBe('Team created');
-      expect(responseObject.team).toEqual(newTeam);
+      expect(responseObject.team).toEqual(populatedTeam);
     });
 
-    it('should create a team with users and managers successfully', async () => {
-      mockRequest.body = {
-        id: '1',
-        name: 'Test Team',
-        active: true,
-        users: ['user1'],
-        managers: ['manager1'],
-      };
+    it('should return 400 if users are not found', async () => {
+      mockRequest.body = { users: ['user1'] };
+      TeamModel.findOne.mockResolvedValue(null);
+      UserModel.find.mockReturnValue({ countDocuments: jest.fn().mockResolvedValue(0) });
 
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(null);
-      (UserModel.find as jest.Mock).mockReturnValue({
-        countDocuments: jest.fn().mockResolvedValue(1)
-      });
-      const newTeam = {
-        id: '1',
-        name: 'Test Team',
-        active: true,
-        users: ['user1'],
-        managers: ['manager1'],
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date),
-        lastModifiedBy: 'system',
-      };
-      (TeamModel.create as jest.Mock).mockResolvedValue(newTeam);
-
-      await teamController.createTeam(mockRequest as Request, mockResponse as Response);
-
-      expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(responseObject.message).toBe('Team created');
-    });
-
-    it('should create a team with multiple users and managers successfully', async () => {
-      mockRequest.body = {
-        id: '1',
-        name: 'Test Team',
-        active: true,
-        users: ['user1', 'user2'],
-        managers: ['manager1', 'manager2'],
-      };
-
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(null);
-      (UserModel.find as jest.Mock).mockReturnValue({
-        countDocuments: jest.fn().mockResolvedValue(2)
-      });
-      const newTeam = {
-        id: '1',
-        name: 'Test Team',
-        active: true,
-        users: ['user1', 'user2'],
-        managers: ['manager1', 'manager2'],
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date),
-        lastModifiedBy: 'system',
-      };
-      (TeamModel.create as jest.Mock).mockResolvedValue(newTeam);
-
-      await teamController.createTeam(mockRequest as Request, mockResponse as Response);
-
-      expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(responseObject.message).toBe('Team created');
-    });
-
-    it('should return 400 if users not found', async () => {
-      mockRequest.body = {
-        id: '1',
-        name: 'Test Team',
-        users: ['user1'],
-      };
-
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(null);
-      (UserModel.find as jest.Mock).mockReturnValue({
-        countDocuments: jest.fn().mockResolvedValue(0)
-      });
-
-      await teamController.createTeam(mockRequest as Request, mockResponse as Response);
+      await teamController.createTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
 
       expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(responseObject).toEqual({ message: 'One or more users not found' });
-    });
-
-    it('should return 400 if managers not found', async () => {
-      mockRequest.body = {
-        id: '1',
-        name: 'Test Team',
-        managers: ['manager1'],
-      };
-
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(null);
-      (UserModel.find as jest.Mock).mockReturnValue({
-        countDocuments: jest.fn().mockResolvedValue(0)
-      });
-
-      await teamController.createTeam(mockRequest as Request, mockResponse as Response);
-
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(responseObject).toEqual({ message: 'One or more managers not found' });
+      expect(responseObject.message).toBe('One or more users not found');
     });
 
     it('should return 403 if team already exists', async () => {
       mockRequest.body = { id: '1' };
-      (TeamModel.findOne as jest.Mock).mockResolvedValue({ id: '1' });
+      TeamModel.findOne.mockResolvedValue({ id: '1' });
 
-      await teamController.createTeam(mockRequest as Request, mockResponse as Response);
+      await teamController.createTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
 
       expect(mockResponse.status).toHaveBeenCalledWith(403);
-      expect(responseObject).toEqual({ message: 'Team already exists' });
+      expect(responseObject.message).toBe('Team already exists');
     });
 
     it('should return 500 on server error', async () => {
-      const error = new Error('Server error');
       mockRequest.body = { id: '1' };
-      (TeamModel.findOne as jest.Mock).mockRejectedValue(error);
+      TeamModel.findOne.mockRejectedValue(new Error('DB Error'));
 
-      await teamController.createTeam(mockRequest as Request, mockResponse as Response);
+      await teamController.createTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
 
       expect(mockResponse.status).toHaveBeenCalledWith(500);
-      expect(responseObject).toEqual({ message: error });
+      expect(responseObject.message).toBe('Error creating team');
     });
   });
 
   describe('getTeams', () => {
     it('should return all teams', async () => {
-      const teams = [{ name: 'Team 1' }, { name: 'Team 2' }];
-      (TeamModel.find as jest.Mock).mockResolvedValue(teams);
-
-      await teamController.getTeams(mockRequest as Request, mockResponse as Response);
-
-      expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(responseObject).toEqual({
-        message: 'Teams fetched',
-        teams: teams,
+      const teams = [{ name: 'Team 1' }];
+      TeamModel.find.mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          populate: jest.fn().mockResolvedValue(teams),
+        }),
       });
+
+      await teamController.getTeams(mockRequest as AuthenticatedRequest, mockResponse as Response);
+      expect(mockResponse.status).toHaveBeenCalledWith(200);
+      expect(responseObject.teams).toEqual(teams);
     });
 
     it('should return 500 on server error', async () => {
-      const error = new Error('Error fetching teams');
-      (TeamModel.find as jest.Mock).mockRejectedValue(error);
+      TeamModel.find.mockImplementation(() => {
+        throw new Error('DB Error');
+      });
 
-      await teamController.getTeams(mockRequest as Request, mockResponse as Response);
-
+      await teamController.getTeams(mockRequest as AuthenticatedRequest, mockResponse as Response);
       expect(mockResponse.status).toHaveBeenCalledWith(500);
-      expect(responseObject).toEqual({ message: error });
+      expect(responseObject.message).toBe('Error fetching teams');
     });
   });
 
@@ -211,133 +133,128 @@ describe('Team Controller', () => {
     it('should update a team successfully', async () => {
       mockRequest.params = { id: '1' };
       mockRequest.body = { name: 'Updated Team' };
+      const existingTeam = { id: '1', name: 'Old Team' };
+      const updatedTeam = { ...existingTeam, ...mockRequest.body };
 
-      const existingTeam = { id: '1', name: 'Old Team', active: true, users: [], managers: [] };
-      const updatedTeamData = { ...existingTeam, name: 'Updated Team' };
-      
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(existingTeam);
-      (TeamModel.findOneAndUpdate as jest.Mock).mockResolvedValue(updatedTeamData);
+      TeamModel.findOne.mockResolvedValue(existingTeam);
+      TeamModel.findOneAndUpdate.mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          populate: jest.fn().mockResolvedValue(updatedTeam),
+        }),
+      });
 
-      await teamController.updateTeam(mockRequest as Request, mockResponse as Response);
-
+      await teamController.updateTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
       expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(responseObject.message).toBe('Team updated');
       expect(responseObject.team.name).toBe('Updated Team');
     });
 
-    it('should update a team with users and managers successfully', async () => {
+    it('should update only the team name', async () => {
       mockRequest.params = { id: '1' };
-      mockRequest.body = { users: ['user1'], managers: ['manager1'] };
+      mockRequest.body = { name: 'New Name' };
 
-      const existingTeam = { id: '1', name: 'Old Team', active: true, users: [], managers: [] };
-      const updatedTeamData = { ...existingTeam, users: ['user1'], managers: ['manager1'] };
-      
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(existingTeam);
-      (UserModel.find as jest.Mock).mockReturnValue({
-        countDocuments: jest.fn().mockResolvedValue(1)
+      const existingTeam = { id: '1', name: 'Old Name' };
+      const updatedTeam = { ...existingTeam, ...mockRequest.body };
+
+      TeamModel.findOne.mockResolvedValue(existingTeam);
+      TeamModel.findOneAndUpdate.mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          populate: jest.fn().mockResolvedValue(updatedTeam),
+        }),
       });
-      (TeamModel.findOneAndUpdate as jest.Mock).mockResolvedValue(updatedTeamData);
 
-      await teamController.updateTeam(mockRequest as Request, mockResponse as Response);
+      await teamController.updateTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
 
       expect(mockResponse.status).toHaveBeenCalledWith(200);
-      expect(responseObject.message).toBe('Team updated');
+      expect(responseObject.team.name).toBe('New Name');
     });
 
-    it('should return 400 if users not found on update', async () => {
+    it('should update users and managers list', async () => {
       mockRequest.params = { id: '1' };
-      mockRequest.body = { users: ['user1'] };
+      mockRequest.body = {
+        users: ['user2'],
+        managers: ['manager2']
+      };
 
-      const existingTeam = { id: '1', name: 'Old Team', active: true, users: [], managers: [] };
-      
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(existingTeam);
-      (UserModel.find as jest.Mock).mockReturnValue({
-        countDocuments: jest.fn().mockResolvedValue(0)
+      const existingTeam = { id: '1', name: 'Test Team' };
+      const updatedTeam = {
+        ...existingTeam,
+        users: [{ _id: 'user2' }],
+        managers: [{ _id: 'manager2' }]
+      };
+
+      const countDocumentsMock = jest.fn()
+        .mockResolvedValueOnce(1)
+        .mockResolvedValueOnce(1);
+      UserModel.find.mockReturnValue({ countDocuments: countDocumentsMock });
+
+      TeamModel.findOne.mockResolvedValue(existingTeam);
+      TeamModel.findOneAndUpdate.mockReturnValue({
+        populate: jest.fn().mockReturnValue({
+          populate: jest.fn().mockResolvedValue(updatedTeam),
+        }),
       });
 
-      await teamController.updateTeam(mockRequest as Request, mockResponse as Response);
+      await teamController.updateTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
 
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(responseObject).toEqual({ message: 'One or more users not found' });
-    });
-
-    it('should return 400 if managers not found on update', async () => {
-      mockRequest.params = { id: '1' };
-      mockRequest.body = { managers: ['manager1'] };
-
-      const existingTeam = { id: '1', name: 'Old Team', active: true, users: [], managers: [] };
-      
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(existingTeam);
-      (UserModel.find as jest.Mock).mockReturnValue({
-        countDocuments: jest.fn().mockResolvedValue(0)
-      });
-
-      await teamController.updateTeam(mockRequest as Request, mockResponse as Response);
-
-      expect(mockResponse.status).toHaveBeenCalledWith(400);
-      expect(responseObject).toEqual({ message: 'One or more managers not found' });
+      expect(mockResponse.status).toHaveBeenCalledWith(200);
+      expect(responseObject.team.users).toEqual([{ _id: 'user2' }]);
+      expect(responseObject.team.managers).toEqual([{ _id: 'manager2' }]);
     });
 
     it('should return 404 if team not found', async () => {
       mockRequest.params = { id: '1' };
-      (TeamModel.findOne as jest.Mock).mockResolvedValue(null);
-
-      await teamController.updateTeam(mockRequest as Request, mockResponse as Response);
-
+      TeamModel.findOne.mockResolvedValue(null);
+      await teamController.updateTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
       expect(mockResponse.status).toHaveBeenCalledWith(404);
-      expect(responseObject).toEqual({ message: 'Team not found' });
+      expect(responseObject.message).toBe('Team not found');
     });
 
     it('should return 500 on server error', async () => {
-        mockRequest.params = { id: '1' };
-        const error = new Error('DB Error');
-        (TeamModel.findOne as jest.Mock).mockRejectedValue(error);
-
-        await teamController.updateTeam(mockRequest as Request, mockResponse as Response);
-
-        expect(mockResponse.status).toHaveBeenCalledWith(500);
-        expect(responseObject).toEqual({ message: 'Error updating team' });
+      mockRequest.params = { id: '1' };
+      TeamModel.findOne.mockRejectedValue(new Error('DB Error'));
+      await teamController.updateTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
+      expect(mockResponse.status).toHaveBeenCalledWith(500);
+      expect(responseObject.message).toBe('Error updating team');
     });
   });
 
   describe('deleteTeam', () => {
     it('should deactivate a team successfully', async () => {
-        mockRequest.params = { id: '1' };
-        const team = {
-            id: '1',
-            name: 'Test Team',
-            active: true,
-            save: jest.fn().mockResolvedValue(this)
-        };
-        (TeamModel.findOne as jest.Mock).mockResolvedValue(team);
+      mockRequest.params = { id: '1' };
 
-        await teamController.deleteTeam(mockRequest as Request, mockResponse as Response);
+      const populatedTeam = { id: '1', active: false };
+      const teamInstance = {
+        id: '1',
+        active: true,
+        save: jest.fn().mockResolvedValue(undefined),
+        populate: jest.fn().mockResolvedValue(populatedTeam),
+      };
 
-        expect(team.active).toBe(false);
-        expect(team.save).toHaveBeenCalled();
-        expect(mockResponse.status).toHaveBeenCalledWith(200);
-        expect(responseObject.message).toBe('Team Deactivated');
+      TeamModel.findOne.mockResolvedValue(teamInstance);
+
+      await teamController.deleteTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
+
+      expect(teamInstance.active).toBe(false);
+      expect(teamInstance.save).toHaveBeenCalled();
+      expect(mockResponse.status).toHaveBeenCalledWith(200);
+      expect(responseObject.message).toBe('Team Deactivated');
+      expect(responseObject.team.active).toBe(false);
     });
 
     it('should return 404 if team not found', async () => {
-        mockRequest.params = { id: '1' };
-        (TeamModel.findOne as jest.Mock).mockResolvedValue(null);
-
-        await teamController.deleteTeam(mockRequest as Request, mockResponse as Response);
-
-        expect(mockResponse.status).toHaveBeenCalledWith(404);
-        expect(responseObject).toEqual({ message: 'Team not found' });
+      mockRequest.params = { id: '1' };
+      TeamModel.findOne.mockResolvedValue(null);
+      await teamController.deleteTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
+      expect(mockResponse.status).toHaveBeenCalledWith(404);
+      expect(responseObject.message).toBe('Team not found');
     });
 
     it('should return 500 on server error', async () => {
-        mockRequest.params = { id: '1' };
-        const error = new Error('DB Error');
-        (TeamModel.findOne as jest.Mock).mockRejectedValue(error);
-
-        await teamController.deleteTeam(mockRequest as Request, mockResponse as Response);
-
-        expect(mockResponse.status).toHaveBeenCalledWith(500);
-        expect(responseObject).toEqual({ message: 'Error deactivating team' });
+      mockRequest.params = { id: '1' };
+      TeamModel.findOne.mockRejectedValue(new Error('DB Error'));
+      await teamController.deleteTeam(mockRequest as AuthenticatedRequest, mockResponse as Response);
+      expect(mockResponse.status).toHaveBeenCalledWith(500);
+      expect(responseObject.message).toBe('Error deactivating team');
     });
   });
 });

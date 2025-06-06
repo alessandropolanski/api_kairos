@@ -28,6 +28,8 @@ describe('User Controller - updateUser', () => {
   let mockRequest: Partial<Request>;
   let mockResponse: Partial<Response>;
   let responseObject: any;
+  const mockDate = new Date('2024-01-01T00:00:00.000Z');
+  const mockUserPki = 'adminPki';
  
   const baseUser = {
     pki: '123xyz',
@@ -40,12 +42,14 @@ describe('User Controller - updateUser', () => {
  
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(global, 'Date').mockImplementation(() => mockDate);
  
     responseObject = {};
  
     mockRequest = {
       params: { pki: baseUser.pki },
       body: {},
+      user: { pki: mockUserPki } as any,
     };
  
     mockResponse = {
@@ -89,6 +93,8 @@ describe('User Controller - updateUser', () => {
       email: requestBody.email,
       password: 'hashedNewPassword',
       active: expectedActiveStateInDb,
+      updatedAt: mockDate,
+      lastModifiedBy: mockUserPki,
     };
     UserModel.findOneAndUpdate.mockResolvedValue(updatedUserMock);
  
@@ -104,6 +110,8 @@ describe('User Controller - updateUser', () => {
           role: requestBody.role,
           password: 'hashedNewPassword',
           active: expectedActiveStateInDb,
+          updatedAt: mockDate,
+          lastModifiedBy: mockUserPki,
         },
       },
       { new: true }
@@ -143,6 +151,8 @@ describe('User Controller - updateUser', () => {
           role: foundUser.role,
           password: foundUser.password,
           active: foundUser.active,
+          updatedAt: mockDate,
+          lastModifiedBy: mockUserPki,
         }
       },
       { new: true }
@@ -212,7 +222,9 @@ describe('User Controller - updateUser', () => {
       email: existingUser.email,
       role: existingUser.role,
       password: existingUser.password, // Controller usa a senha existente se não for fornecida nova
-      active: existingUser.active    // Controller usa active existente (true) se não fornecido
+      active: existingUser.active,    // Controller usa active existente (true) se não fornecido
+      updatedAt: mockDate,
+      lastModifiedBy: mockUserPki,
     };
  
     // findOneAndUpdate será chamado e deve retornar o usuário (mesmo que não modificado)

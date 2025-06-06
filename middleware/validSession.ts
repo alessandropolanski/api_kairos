@@ -7,4 +7,6 @@ export const sessionMiddleware = authMiddlewareWithPublicRoutes([
     '/api/auth/login',
     '/api/auth/logout',
     '/api/auth/register',
+    '/api/auth/sessions',
+    
 ]);

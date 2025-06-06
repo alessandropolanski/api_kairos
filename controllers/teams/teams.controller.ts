@@ -2,11 +2,12 @@ import { Request, response, Response } from "express";
 import { HydratedDocument, InferSchemaType } from "mongoose";
 import { TeamModel, teamSchema } from "../../models/Team";
 import { UserModel } from "../../models/User";
+import { AuthenticatedRequest } from "../../types/auth.types";
 
 type Team = InferSchemaType<typeof teamSchema>;
 type TeamDoc = HydratedDocument<Team>;
 
-const createTeam = async (req: Request, res: Response) => {
+const createTeam = async (req: AuthenticatedRequest, res: Response) => {
     const { id, name, active, users, managers } = req.body;
   
     try {
@@ -37,35 +38,35 @@ const createTeam = async (req: Request, res: Response) => {
           managers,
           createdAt: currentDate,
           updatedAt: currentDate,
-          lastModifiedBy: 'system'
+          lastModifiedBy: req.user?.pki
         };
   
         const newTeamSaved = await TeamModel.create(newTeam);
-        // const populatedTeam = await TeamModel.findById(newTeamSaved._id).populate('users').populate('managers');
+        const populatedTeam = await newTeamSaved.populate(['users', 'managers'])
         return res.status(200).json({
           message: "Team created",
-          team: newTeamSaved
+          team: populatedTeam
         });
   
       }
     } catch (error) {
-      return res.status(500).json({ message: error });
+      return res.status(500).json({ message: "Error creating team" });
     }
 };
 
-const getTeams = async (req: Request, res: Response) => {
+const getTeams = async (req: AuthenticatedRequest, res: Response) => {
     try {
-        const teams = await TeamModel.find();
+        const teamsResponse = await TeamModel.find().populate('users').populate('managers');
         return res.status(200).json({
             message: "Teams fetched",
-            teams
+            teams: teamsResponse
         });
     } catch (error) {
-        return res.status(500).json({ message: error });
+        return res.status(500).json({ message: "Error fetching teams" });
     }
 }
 
-const updateTeam = async (req: Request, res: Response) => {
+const updateTeam = async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
   const { name, active, users, managers } = req.body;
 
@@ -91,28 +92,23 @@ const updateTeam = async (req: Request, res: Response) => {
 
     let newTeam: Partial<Team> = {
       name: name || team.name,
-      active: active || team.active,
+      active: active !== undefined ? active : team.active,
       users: users || team.users,
       managers: managers || team.managers,
       updatedAt: new Date(),
-      lastModifiedBy: 'system'
+      lastModifiedBy: req.user?.pki
     }
 
-    const savedTeam = await TeamModel.findOneAndUpdate(
+    const savedUser = await TeamModel.findOneAndUpdate(
       {id: id}, 
       {$set: newTeam}, 
       {new: true}
-    );
+    ).populate('users').populate('managers');
 
 
     return res.status(200).json({
       message: "Team updated",
-      team: {
-        name: savedTeam?.name,
-        active: savedTeam?.active,
-        users: savedTeam?.users,
-        managers: savedTeam?.managers
-      }
+      team: savedUser
     });
 
   } catch (error) {
@@ -121,7 +117,7 @@ const updateTeam = async (req: Request, res: Response) => {
   }
 }
 
-const deleteTeam = async (req: Request, res: Response) => {
+const deleteTeam = async (req: AuthenticatedRequest, res: Response) => {
   const { id } = req.params;
 
   try {
@@ -133,6 +129,7 @@ const deleteTeam = async (req: Request, res: Response) => {
 
     team.active = false;
     await team.save();
+    await team.populate(['users', 'managers']);
     return res.status(200).json({
       message: "Team Deactivated",
       team
