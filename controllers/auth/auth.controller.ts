@@ -2,10 +2,11 @@ import { Request, Response } from "express";
 import { db } from "../../database/database";
 import { hashPassword, comparePassword } from "./auxFunctions";
 import { SessionModel } from "../../models/Session";
-import jwt from "jsonwebtoken";
+import { generateToken, validateToken, extractTokenFromHeader } from "../../utils/jwt.utils";
 import { InferSchemaType } from "mongoose";
 import { HydratedDocument } from "mongoose";
 import { UserModel, userSchema } from "../../models/User";
+import { AuthenticatedRequest, LoginCredentials, LoginResponse } from "../../types/auth.types";
 
 type User = InferSchemaType<typeof userSchema>;
 type UserDoc = HydratedDocument <User>;
@@ -80,10 +81,10 @@ const loginUser = async (req: Request, res: Response) => {
 
         const savedSession = await newSession.save();
 
-        const token = jwt.sign({ 
+        const token = generateToken({ 
           pki: user.pki, 
           sessionId: savedSession.sessionId 
-        }, process.env.JWT_SECRET || 'secret');
+        });
 
         return res.status(200).json({ 
           message: "Login successful", 
@@ -98,21 +99,21 @@ const loginUser = async (req: Request, res: Response) => {
 
 const logoutUser = async (req: Request, res: Response) => {
     try {
-        const token = req.headers.authorization?.replace('Bearer ', '');
+        const token = extractTokenFromHeader(req.headers.authorization);
         
         if (!token) {
             return res.status(401).json({ message: "Token not provided" });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+        const validation = validateToken(token);
         
-        if (!decoded.sessionId) {
-            return res.status(400).json({ message: "Invalid token format" });
+        if (!validation.isValid || !validation.decoded) {
+            return res.status(400).json({ message: validation.error || "Invalid token format" });
         }
 
         // Invalidar a sessão
         await SessionModel.findOneAndUpdate(
-            { sessionId: decoded.sessionId },
+            { sessionId: validation.decoded.sessionId },
             { valid: false }
         );
 
