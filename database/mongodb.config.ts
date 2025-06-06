@@ -1,6 +1,6 @@
 import { MongoClient } from 'mongodb';
 
-const MONGODB_URI = 'mongodb://localhost:27017';
+const MONGODB_URI = 'mongodb://localhost:27018';
 const DB_NAME = 'kairos';
 
 let client: MongoClient;

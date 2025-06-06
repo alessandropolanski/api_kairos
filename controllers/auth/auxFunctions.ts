@@ -1,15 +1,9 @@
 const bcrypt = require('bcrypt');
 import uuid4  from 'uuid4';
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import { SessionModel } from '../../models/Session';
-import jwt from 'jsonwebtoken';
-
-interface AuthenticatedRequest extends Request {
-    user?: {
-        pki: string;
-        sessionId: string;
-    };
-}
+import { validateToken, extractTokenFromHeader } from '../../utils/jwt.utils';
+import { AuthenticatedRequest } from '../../types/auth.types';
 
 const saltRounds = 10;
 
@@ -28,17 +22,19 @@ export const generateUUID = () => {
 
 export const sessionMiddleware = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-        const token = req.headers.authorization?.replace('Bearer ', '');
+        const token = extractTokenFromHeader(req.headers.authorization);
         
         if (!token) {
             return res.status(401).json({ message: "Token not provided" });
         }
 
-        const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as any;
+        const validation = validateToken(token);
         
-        if (!decoded.sessionId || !decoded.pki) {
-            return res.status(401).json({ message: "Invalid token format" });
+        if (!validation.isValid || !validation.decoded) {
+            return res.status(401).json({ message: validation.error || "Invalid token format" });
         }
+
+        const { decoded } = validation;
 
         // Validar sessão específica
         const session = await SessionModel.findOne({ 
