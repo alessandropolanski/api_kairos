@@ -53,7 +53,7 @@ const updateUser = async (req: AuthenticatedRequest, res: Response) => {
       password: password && password.length > 0 ? await hashPassword(password) : user.password,
       active: active || user.active,
       updatedAt: new Date(),
-      lastModifiedBy: user.lastModifiedBy
+      lastModifiedBy: req.user?.pki
     }
 
     const savedUser = await UserModel.findOneAndUpdate(
